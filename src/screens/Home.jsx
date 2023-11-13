@@ -64,6 +64,17 @@ const DestinationCard = ({ name, icon, active, callback }) => {
   );
 };
 
+const DriverInfoCard = ({ driverName, driverNumber, driverPlate }) => {
+  return (
+    <div>
+      <h6>Driver's Info</h6>
+      <p>{driverName}</p>
+      <p>{driverNumber}</p>
+      <p>{driverPlate}</p>
+    </div>
+  );
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const user = useSelector(selectUser);
@@ -72,8 +83,11 @@ const Home = () => {
   const [currentRide, setCurrentRide] = useState();
   const [newRequest, setNewRequest] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [myLocation, setMyLocation] = useState("");
+  const [driverInfo, setDriverInfo] = useState(null);
 
   const requestRide = async () => {
+    console.log(myLocation);
     setLoading(true);
     let { data: profiles, error: profilesErr } = await supabase
       .from("profiles")
@@ -87,20 +101,23 @@ const Home = () => {
         {
           rider: user.id,
           driver: profiles[0].id,
-          price: 500,
+          price: 150,
           destination: locations[activeDestination].title,
           destination_lat: locations[activeDestination].lat,
           destination_lng: locations[activeDestination].lng,
+          rider_location: myLocation,
         },
       ])
       .select();
     if (error) {
       console.log(error);
     }
+
     console.log(data);
 
     setLoading(false);
     setCurrentRide(data[0]);
+
     setNewRequest(true);
   };
 
@@ -125,27 +142,69 @@ const Home = () => {
     if (payload.driver === currentRide?.driver) {
       setCurrentRide(payload);
       setNewRequest(false);
+      const { data: driver, error: driverError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", payload.driver);
+
+      if (!driverError) {
+        setDriverInfo(driver[0]);
+      }
     }
 
     if (currentRide?.status === "declined") {
       setCurrentRide(null);
+      setDriverInfo(null);
+      setactiveDestination(0);
+    }
+
+    if (currentRide?.status === "completed") {
+      setCurrentRide(null);
+      setDriverInfo(null);
       setactiveDestination(0);
     }
   };
 
   return (
     <div className="h-screen flex flex-col relative">
-      <button
-        onClick={() => navigate("/history")}
-        className="absolute z-30 flex justify-center items-center bg-white shadow-lg p-2 top-3 left-3 rounded-full"
-      >
-        <MdMenu size={30} />
-      </button>
+      <div className="absolute z-30 flex w-full p-2 top-3">
+        <button
+          onClick={() => navigate("/history")}
+          className=" flex justify-center items-center bg-white shadow-lg p-2 mr-2 rounded-full"
+        >
+          <MdMenu size={30} />
+        </button>
+        <select
+          name=""
+          id=""
+          onChange={(e) => setMyLocation(e.target.value)}
+          className="flex-1 bg-white px-2 rounded-md shadow-lg w-full"
+        >
+          <option disabled value="">
+            Where are you?
+          </option>
+          {locations.map((location, index) => (
+            <option key={location.title} value={location.title}>
+              {location.title}
+            </option>
+          ))}
+        </select>
+      </div>
+      {driverInfo && (
+        <div className="absolute z-30 top-20 right-0 w-48 shadow-md bg-white rounded-sm p-2">
+          <DriverInfoCard
+            driverName={driverInfo.full_name}
+            driverNumber={driverInfo.phone_number}
+            driverPlate={driverInfo.driver_plate}
+          />
+        </div>
+      )}
+
       <div className="h-[55%]">
         <RideMap destination={locations[activeDestination]} />
       </div>
       <div className="h-[45%] px-5">
-        <h4 className="text-2xl text-bold pt-8 mb-3">What your destination?</h4>
+        <h4 className="text-xl text-bold pt-8 mb-3">What your destination?</h4>
         <div className="flex flex-wrap justify-between">
           {locations.map((location, index) => (
             <DestinationCard
@@ -164,17 +223,24 @@ const Home = () => {
             loading ||
             newRequest ||
             currentRide?.status === "on-route" ||
+            currentRide?.status === "arrived" ||
             currentRide?.status === "picked-up" ||
             currentRide?.status === "payment"
           }
-          className="w-full bg-green-800 py-4 rounded-md disabled:bg-gray-400 text-white text-lg"
+          className={`w-full bg-green-800 py-4 rounded-md ${
+            currentRide?.status === "arrived"
+              ? "disabled:bg-yellow-400"
+              : "disabled:bg-gray-400"
+          } text-white text-lg`}
         >
           {loading ? (
             <Spinner />
           ) : newRequest ? (
             "You have an ongoing request"
           ) : currentRide?.status === "on-route" ? (
-            "Your Driver is on the way"
+            "Your driver is on the way"
+          ) : currentRide?.status === "arrived" ? (
+            "Your driver is here"
           ) : currentRide?.status === "picked-up" ? (
             "You are now on route"
           ) : currentRide?.status === "payment" ? (
